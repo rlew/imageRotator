@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
   } else {
     compress_or_decompress(stdin);
   }
-
+/*
     if(image1->width%2 != 0) {
         image1->width -= 1;
     }
@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
     if(image2->height%2 != 0) {
         image2->height -= 1;
     }
-
+*/
     
 
 }

@@ -4,24 +4,18 @@
 #include "assert.h"
 #include "compress40.h"
 #include "a2methods.h"
+#include "a2plain.h"
 #include "uarray2.h"
 #include "pnm.h"
 #include "mem.h"
 #include "math.h"
 
 struct RGB {
-    int R;
-    int G;
-    int B;
+   unsigned red;
+   unsigned green;
+   unsigned blue;
 };
 
-void applySum(int row, int col, void* elem, void*cl) {
-    struct RGB* sum = (struct RGB*)cl;
-    struct Pnm_rgb* pixel = (struct Pnm_rgb*)elem;
-    sum->R += pixel->red;
-    sum->G += pixel->green;
-    sum->B += pixel->blue;
-}
 
 int main(int argc, char *argv[]) {
     Pnm_ppm image1;
@@ -52,9 +46,8 @@ int main(int argc, char *argv[]) {
         fclose(fp);
     }
     
-    struct RGB image1cl = { 0, 0, 0 };
-    struct RGB image2cl = { 0, 0, 0 };
     int width, height;
+    double sum = 0;
 
     if(abs(image1->height - image2->height) <= 1) {
         if (image1->height > image2->height) {
@@ -68,26 +61,40 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Height doesn't match.\n");
         exit(1);
     }
-    if(abs(image1->width - image2->width) > 1) {
+    if(abs(image1->width - image2->width) <= 1) {
         if (image1->width > image2->width) {
-            height = image2->width;
+            width = image2->width;
         }
         else {
-            height = image1->width;
+            width = image1->width;
         }
     }
     else {
         fprintf(stderr, "Height doesn't match.\n");
         exit(1);
     }
-
-    for(int r = 0; r < image1->height; r++) {
-        for(int c = 0; c < image1->width; c++) {
-            // summing each rgb
+    struct Pnm_rgb *temp1;
+    struct Pnm_rgb *temp2;
+    NEW(temp1);
+    NEW(temp2);
+    //should loop through every element and square the difference
+    //between each rgb element
+    for(int r = 0; r < height; r++) {
+        for(int c = 0; c < width; c++) {
+            temp1 = methods->at(image1->pixels, c, r);
+            temp2->red   = temp1->red;
+            temp2->green = temp1->green;
+            temp2->blue  = temp1->blue;
+            temp1 = methods->at(image2->pixels, c, r);
+            sum += (double)(pow(((double)(temp1->red) - (double)(temp2->red)), 2)
+                  + (double)pow(((double)(temp1->red) - (double)(temp2->red)), 2)
+                  + (double)pow(((double)(temp1->red) - (double)(temp2->red)), 2));
         }
     }
-    //divide
+    printf("Sum %f\n", (double)sum);
+    /* Divide*/
+    double E = sqrt(sum/(3*(double)(width *height)));
     //sqrt
     //return
-            
+    printf("E is: %f\n", E);
 }
