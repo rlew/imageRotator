@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "assert.h"
-#include "compress40.h"
 #include "a2methods.h"
 #include "a2plain.h"
 #include "uarray2.h"
@@ -18,6 +17,10 @@ struct RGB {
 
 
 int main(int argc, char *argv[]) {
+  if(argc != 3) {
+    printf("Not enough arguments to compare\n");
+    exit(1);
+  }
     Pnm_ppm image1;
     Pnm_ppm image2;
     A2Methods_T methods = uarray2_methods_plain;
@@ -82,19 +85,20 @@ int main(int argc, char *argv[]) {
     for(int r = 0; r < height; r++) {
         for(int c = 0; c < width; c++) {
             temp1 = methods->at(image1->pixels, c, r);
-            temp2->red   = temp1->red;
-            temp2->green = temp1->green;
-            temp2->blue  = temp1->blue;
-            temp1 = methods->at(image2->pixels, c, r);
-            sum += (double)(pow(((double)(temp1->red) - (double)(temp2->red)), 2)
-                  + (double)pow(((double)(temp1->red) - (double)(temp2->red)), 2)
-                  + (double)pow(((double)(temp1->red) - (double)(temp2->red)), 2));
+            temp2 = methods->at(image2->pixels, c, r);
+                 sum += (pow(((((double)(temp1->red))/(double)image1->denominator) - ((double)(temp2->red))/(double)image2->denominator), 2)
+                     + pow(((((double)(temp1->green))/(double)image1->denominator) - ((double)(temp2->green))/(double)image2->denominator), 2)
+
+                     + pow(((((double)(temp1->blue))/(double)image1->denominator) - ((double)(temp2->blue))/(double)image2->denominator), 2));
+
+
         }
     }
-    printf("Sum %f\n", (double)sum);
     /* Divide*/
-    double E = sqrt(sum/(3*(double)(width *height)));
+    double E = sqrt(sum/(3.0*(double)height * (double)width));
     //sqrt
     //return
+    //
     printf("E is: %f\n", E);
+    return 0;
 }

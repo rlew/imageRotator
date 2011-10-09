@@ -17,7 +17,7 @@ CIILIBS=`pkg-config --libs cii40`
 # compile and link against course software and netpbm library
 CFLAGS="-I. -I/comp/40/include $CIIFLAGS"
 LIBS="$CIILIBS -l40locality -lnetpbm -lm"
-LFLAGS="-L/comp/40/lib64 -larith40"
+LFLAGS="-L/comp/40/lib64"
 
 # these flags max out warnings and debug info
 FLAGS="-g -O0 -Wall -Wextra -Werror -Wfatal-errors -std=c99 -pedantic"
@@ -38,10 +38,10 @@ done
 # link together .o files + libraries to make executable binaries
 # using one case statement per executable binary
 case $link in
-  all|ppmdiff) gcc $FLAGS $LFLAGS -o ppmdiff ppmdiff.o\
-  uarray2.o a2plain.o\
-  $LIBS.
-  linked=yes ;;
+  all|ppmdiff) gcc $FLAGS $LFLAGS -o ppmdiff ppmdiff.o \
+                  uarray2.o a2plain.o \
+                  $LIBS 
+              linked=yes ;;
 esac
 
 # error if asked to link something we didn't recognize
