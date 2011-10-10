@@ -30,14 +30,14 @@ static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
   (void) array;
   struct Closure *mycl = cl;
   struct Pnm_rgbScaled *curpix = elem;
-  struct Pnm_rgb *descaled;
-  NEW(descaled);
+  struct Pnm_rgb *descaled = mycl->methods->at(array, col, row);
+  //NEW(descaled);
   unsigned denominator = mycl->denominator;
   descaled->red = (unsigned)curpix->red * denominator;
   descaled->blue = (unsigned)curpix->blue * denominator;
   descaled->green = (unsigned)curpix->green * denominator;
-  struct Pnm_rgb *temp = mycl->methods->at(array, col, row);
-  *temp = *descaled;
+  //struct Pnm_rgb *temp = mycl->methods->at(array, col, row);
+  //*temp = *descaled;
 }
 
   /* Scale to floats using large apply*/
@@ -46,14 +46,14 @@ static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
   (void) array;
   struct Closure *mycl = cl;
   struct Pnm_rgb *curpix = elem;
-  struct Pnm_rgbScaled *scaled;
-  NEW(scaled);
+  struct Pnm_rgbScaled *scaled = mycl->methods->at(mycl->array, col, row);
+  //NEW(scaled);
   unsigned denominator = mycl->denominator;
   scaled->red = (float)(curpix->red) / (float)denominator;
   scaled->blue = (float)(curpix->blue) / (float)denominator;
   scaled->green = (float)(curpix->green) / (float)denominator;
-  struct Pnm_rgbScaled* temp = mycl->methods->at(mycl->array, col, row);
-  *temp = *scaled;
+  //struct Pnm_rgbScaled* temp = mycl->methods->at(mycl->array, col, row);
+  //*temp = *scaled;
 }
 
 static Pnm_ppm trim(Pnm_ppm image){
@@ -79,27 +79,26 @@ void compress40(FILE *input){
     image = trim(image);
 
     A2Methods_UArray2 scaledArray = methods->new(image->width, image->height, sizeof(struct Pnm_rgbScaled));
-    struct Closure *mycl;
-    NEW(mycl);
-    mycl->methods = methods;
-    mycl->denominator = image->denominator;
-    mycl->array = scaledArray;
-    methods->map_row_major(image->pixels, applyRGBToFloatScale, mycl);
+    struct Closure mycl;
+    mycl.methods = methods;
+    mycl.denominator = image->denominator;
+    mycl.array = scaledArray;
+    methods->map_row_major(image->pixels, applyRGBToFloatScale, &mycl);
     Pnm_ppm descaled;
-    NEW(descaled);
     descaled->width = image->width;
     descaled->height = image->height;
     descaled->denominator = image->denominator;
     descaled->pixels = methods->new(descaled->width, descaled->height, sizeof(struct Pnm_rgb));
     descaled->methods = methods;
-    struct Closure *cl;
-    NEW(cl);
-    cl->methods = methods;
-    cl->denominator = descaled->denominator;
-    cl->array = descaled->pixels;
- cd    methods->map_row_major(descaled->pixels, applyRGBToIntScale, cl);
-    Pnm_ppmwrite(stdout, image);
-    FREE(mycl);
+    struct Closure cl;
+    cl.methods = methods;
+    cl.denominator = descaled->denominator;
+    cl.array = descaled->pixels;
+    methods->map_row_major(descaled->pixels, applyRGBToIntScale, &cl);
+    Pnm_ppmwrite(stdout, descaled);
+    methods->free(&(mycl.array));
+
+    Pnm_ppmfree(&descaled);
     Pnm_ppmfree(&image);
 }
 
