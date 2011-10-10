@@ -25,19 +25,21 @@ struct Pnm_rgbScaled {
 };
 
   /* Scale to integers using large apply*/
-/*static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
+static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
                                 void *elem, void *cl){
-  struct Closure *mycl = (struct Closure*)cl;
-  struct Pnm_rgbScaled *curpix = (struct Pnm_rgbScaled*)elem;
+  (void) array;
+  struct Closure *mycl = cl;
+  struct Pnm_rgbScaled *curpix = elem;
   struct Pnm_rgb *descaled;
+  NEW(descaled);
   unsigned denominator = mycl->denominator;
-  descaled->red = (unsigned)(curpix->red * denominator);
-  descaled->blue = (unsigned)(curpix->blue * denominator);
-  descaled->green = (unsigned)(curpix->green * denominator);
-  FREE(curpix);
+  descaled->red = (unsigned)curpix->red * denominator;
+  descaled->blue = (unsigned)curpix->blue * denominator;
+  descaled->green = (unsigned)curpix->green * denominator;
   struct Pnm_rgb *temp = mycl->methods->at(array, col, row);
-  temp = descaled;
-}*/
+  *temp = *descaled;
+}
+
   /* Scale to floats using large apply*/
 static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
                                 A2Methods_Object *elem, void *cl){
@@ -83,10 +85,22 @@ void compress40(FILE *input){
     mycl->denominator = image->denominator;
     mycl->array = scaledArray;
     methods->map_row_major(image->pixels, applyRGBToFloatScale, mycl);
+    Pnm_ppm descaled;
+    NEW(descaled);
+    descaled->width = image->width;
+    descaled->height = image->height;
+    descaled->denominator = image->denominator;
+    descaled->pixels = methods->new(descaled->width, descaled->height, sizeof(struct Pnm_rgb));
+    descaled->methods = methods;
+    struct Closure *cl;
+    NEW(cl);
+    cl->methods = methods;
+    cl->denominator = descaled->denominator;
+    cl->array = descaled->pixels;
+ cd    methods->map_row_major(descaled->pixels, applyRGBToIntScale, cl);
+    Pnm_ppmwrite(stdout, image);
     FREE(mycl);
     Pnm_ppmfree(&image);
-    //methods->map_row_major(image->pixels, applyRGBToIntScale, &mycl);
-    //Pnm_ppmwrite(stdout, image);
 }
 
 
