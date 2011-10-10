@@ -42,16 +42,16 @@ struct Pnm_rgbScaled {
 static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
                                 A2Methods_Object *elem, void *cl){
   (void) array;
-  struct Closure *mycl = (struct Closure*)cl;
-  struct Pnm_rgb *curpix = (struct Pnm_rgb*)elem;
+  struct Closure *mycl = cl;
+  struct Pnm_rgb *curpix = elem;
   struct Pnm_rgbScaled *scaled;
   NEW(scaled);
   unsigned denominator = mycl->denominator;
   scaled->red = (float)(curpix->red) / (float)denominator;
   scaled->blue = (float)(curpix->blue) / (float)denominator;
   scaled->green = (float)(curpix->green) / (float)denominator;
-  struct Pnm_rgbScaled *temp = mycl->methods->at(mycl->scaledArray, col, row);
-  temp = scaled;
+  struct Pnm_rgbScaled* temp = mycl->methods->at(mycl->scaledArray, col, row);
+  *temp = *scaled;
 }
 
 void compress40(FILE *input){
