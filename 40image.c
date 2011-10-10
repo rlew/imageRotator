@@ -9,7 +9,17 @@
 #include "except.h"
 #include <stdlib.h>
 #include "mem.h"
-
+/*
+static void printvals(int col, int row, A2Methods_UArray2 array, void* elem,
+void*cl) {
+    (void) row;
+    (void) col;
+    (void) array;
+    (void) cl;
+    struct Pnm_rgb* e = elem;
+    printf("r: %d, g: %d, b:%d\n", e->red, e->green, e->blue);
+}
+*/
 static void (*compress_or_decompress)(FILE *input) = compress40;
 
 struct Closure {
@@ -30,14 +40,11 @@ static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
   (void) array;
   struct Closure *mycl = cl;
   struct Pnm_rgbScaled *curpix = elem;
-  struct Pnm_rgb *descaled = mycl->methods->at(array, col, row);
-  //NEW(descaled);
+  struct Pnm_rgb *descaled = mycl->methods->at(mycl->array, col, row);
   unsigned denominator = mycl->denominator;
-  descaled->red = (unsigned)curpix->red * denominator;
-  descaled->blue = (unsigned)curpix->blue * denominator;
-  descaled->green = (unsigned)curpix->green * denominator;
-  //struct Pnm_rgb *temp = mycl->methods->at(array, col, row);
-  //*temp = *descaled;
+  descaled->red = (unsigned)(curpix->red * denominator);
+  descaled->blue = (unsigned)(curpix->blue * denominator);
+  descaled->green = (unsigned)(curpix->green * denominator);
 }
 
   /* Scale to floats using large apply*/
@@ -45,25 +52,15 @@ static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
                                 A2Methods_Object *elem, void *cl){
   (void) array;
   struct Closure *mycl = cl;
-  struct Pnm_rgb *curpix = elem;
-  struct Pnm_rgbScaled *scaled = mycl->methods->at(mycl->array, col, row);
-  //NEW(scaled);
-  unsigned denominator = mycl->denominator;
-  scaled->red = (float)(curpix->red) / (float)denominator;
-  scaled->blue = (float)(curpix->blue) / (float)denominator;
-  scaled->green = (float)(curpix->green) / (float)denominator;
-  //struct Pnm_rgbScaled* temp = mycl->methods->at(mycl->array, col, row);
-  //*temp = *scaled;
-}
-
-static Pnm_ppm trim(Pnm_ppm image){
-    if(image->width % 2 != 0)
-      image->width -= 1;
-
-    if(image->height % 2 != 0)
-      image->height -= 1;
-
-    return image;
+  struct Pnm_rgb *curpix = elem; 
+  if(row < mycl->methods->height(mycl->array) && 
+      col < mycl->methods->width(mycl->array)) {
+      struct Pnm_rgbScaled *scaled = mycl->methods->at(mycl->array, col, row);
+      unsigned denominator = mycl->denominator;
+      scaled->red = (float)(curpix->red) / (float)denominator;
+      scaled->blue = (float)(curpix->blue) / (float)denominator;
+      scaled->green = (float)(curpix->green) / (float)denominator;
+  }
 }
 
 void compress40(FILE *input){
@@ -76,28 +73,43 @@ void compress40(FILE *input){
         fprintf(stderr, "Badly formatted file.\n");
         exit(1);
     END_TRY;
-    image = trim(image);
+    //printf("before resizing\n");
+    if(image->width % 2 != 0) {
+      image->width -= 1;
+    }
+    if(image->height % 2 != 0) {
+      image->height -= 1;
+    }
 
-    A2Methods_UArray2 scaledArray = methods->new(image->width, image->height, sizeof(struct Pnm_rgbScaled));
+    //printf("height, width: %d, %d\n", image->height, image->width);
+    /* Array to hold floats */
+    A2Methods_UArray2 scaledArray = methods->new(image->width, 
+                                    image->height, 
+                                    sizeof(struct Pnm_rgbScaled));
     struct Closure mycl;
     mycl.methods = methods;
     mycl.denominator = image->denominator;
     mycl.array = scaledArray;
     methods->map_row_major(image->pixels, applyRGBToFloatScale, &mycl);
+
+    /* New ppm to hold floats that are now integers */
     Pnm_ppm descaled;
+    NEW(descaled);
     descaled->width = image->width;
     descaled->height = image->height;
     descaled->denominator = image->denominator;
-    descaled->pixels = methods->new(descaled->width, descaled->height, sizeof(struct Pnm_rgb));
+    descaled->pixels = methods->new(descaled->width, descaled->height, 
+                       sizeof(struct Pnm_rgb));
     descaled->methods = methods;
     struct Closure cl;
     cl.methods = methods;
     cl.denominator = descaled->denominator;
     cl.array = descaled->pixels;
-    methods->map_row_major(descaled->pixels, applyRGBToIntScale, &cl);
-    Pnm_ppmwrite(stdout, descaled);
-    methods->free(&(mycl.array));
+    methods->map_row_major(scaledArray, applyRGBToIntScale, &cl);
+    //methods->map_row_major(descaled->pixels, printvals, NULL);
+    Pnm_ppmwrite(stdout, descaled); 
 
+    methods->free(&scaledArray);
     Pnm_ppmfree(&descaled);
     Pnm_ppmfree(&image);
 }
