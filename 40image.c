@@ -15,7 +15,7 @@ static void (*compress_or_decompress)(FILE *input) = compress40;
 struct Closure {
   A2Methods_T methods;
   unsigned denominator;
-  A2Methods_UArray2 scaledArray;
+  A2Methods_UArray2 array;
 };
 
 struct Pnm_rgbScaled {
@@ -50,8 +50,18 @@ static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
   scaled->red = (float)(curpix->red) / (float)denominator;
   scaled->blue = (float)(curpix->blue) / (float)denominator;
   scaled->green = (float)(curpix->green) / (float)denominator;
-  struct Pnm_rgbScaled* temp = mycl->methods->at(mycl->scaledArray, col, row);
+  struct Pnm_rgbScaled* temp = mycl->methods->at(mycl->array, col, row);
   *temp = *scaled;
+}
+
+static Pnm_ppm trim(Pnm_ppm image){
+    if(image->width % 2 != 0)
+      image->width -= 1;
+
+    if(image->height % 2 != 0)
+      image->height -= 1;
+
+    return image;
 }
 
 void compress40(FILE *input){
@@ -64,18 +74,16 @@ void compress40(FILE *input){
         fprintf(stderr, "Badly formatted file.\n");
         exit(1);
     END_TRY;
+    image = trim(image);
 
-    if(!(image->width % 2)){
-      image->width -= 1;
-
-    }
-    if(!(image->height % 2)){
-      image->height -= 1;
-    }
     A2Methods_UArray2 scaledArray = methods->new(image->width, image->height, sizeof(struct Pnm_rgbScaled));
-    struct Closure mycl = {methods, image->denominator, scaledArray};
-    methods->map_row_major(image->pixels, applyRGBToFloatScale, &mycl);
-    methods->free(scaledArray);
+    struct Closure *mycl;
+    NEW(mycl);
+    mycl->methods = methods;
+    mycl->denominator = image->denominator;
+    mycl->array = scaledArray;
+    methods->map_row_major(image->pixels, applyRGBToFloatScale, mycl);
+    FREE(mycl);
     Pnm_ppmfree(&image);
     //methods->map_row_major(image->pixels, applyRGBToIntScale, &mycl);
     //Pnm_ppmwrite(stdout, image);
