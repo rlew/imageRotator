@@ -1,0 +1,174 @@
+Rachel Lew
+Trevor John
+
+OVERALL ARCHITECTURE
+    We are designing an image compressor that takes a PPM and compresses it
+    to a third the size through the use of bit packing and lossy 
+    compression. We are using our UArray2 to create a pixmap that will then be
+    used in the various stages of the compression such as converting from 
+    scaled RGB integers to floats. We are using UArray2b to create a pixmap 
+    that will map from luminance and chroma values to average chroma and cosine
+    coefficient floats. We will then use UArray2 again to represent the pixmap
+    in the conversion from average chroma values and cosine coefficients
+    floats to scaled integers representations of these data types. These
+    integers will then be packed into a 32-bit word representing a block of 4
+    pixels in the original image, reducing the total information to a third of
+    the original size.
+
+    We are also designing an image decompressor that takes in the bit-packed
+    representation of an image and reverses the sequence of compression
+    operations indicated above to represent the original image as closely as
+    possible (lossy compression).
+
+    40image (40image.c)
+    - int main(int argc, char* argv[])
+        Handles input by reading in command (-c or -d) and file to be
+        modified. Exits and prints to stderr when too many arguments are given
+        and when unknown flags are specified.
+
+    compress40 (compress40.c)
+    - void compress40(FILE *input)
+        Creates the PPM from the input file and uses below apply functions on
+        different representations of pixmap (uarray2 or uarray2b) to compress
+        the image to a third of the original size
+    - void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array, 
+        void* elem, void* cl)
+        Transforms the RGB int structs to RGB float structs for a given pixel 
+    - void applyRGBFloatToLuminanceAndChromaFloats(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+        Transforms the RGB float struct to a luminance and average red / blue
+        chroma values to represent the given pixel.
+    - void applyLuminanceAndChromaFloatsToAvgAndDCT(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+        Collects the block (2x2) to be averaged and transformed with the
+        discrete cosine formula
+    - void* averageAndDCTBlock(void* block);
+        Returns the average blue and red chroma values and the cosine
+        coeffients for the 4 elements in the block.
+    - void applyAvgAndDCTFloatsToInts(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+    - void applyBitPacking(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+    
+    decompress40 (compress40.c)
+    - void decompress40(FILE *input)
+        Takes a pointer to a compressed image and uses below apply functions
+        on different representations of pixmap (uarray2 or uarray2b) to
+        decompress the image to its original size.
+    - void applyUnpackBits(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+    - void applyAvgAndDCTIntsToFloats(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+    - void applyAvgAndDCTToLuminanceAndChromaFloats(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+    - void applyLuminanceAndChromaFloatsToRGBFloat(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl)
+        Transforms the luminance and chroma red/blue values into an RGB float
+        struct for a given pixel.
+    - void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array, void*
+        elem, void* cl)
+        Transforms the RGB float structs to RGB int structs for a given pixel.
+
+    UArray2 (uarray2.c)
+    - UArray2_T UArray2_new(int numRows, int numCols, int size) should 
+        return a two dimensional array of the given dimensions if the
+        numbers are valid ( > 0) and a NULL pointer otherwise.
+    - void UArray2_free(T uarray2) frees the memory associated.
+    - int UArray2_numRows(T twoDArray) returns the number of rows.
+    - int UArray2_numCols(T twoDArray) returns the number of columns.
+    - int UArray2_size(T twoDArray) returns the size of each element.
+    - void * UArray2_at(T twoDArray, int row, int col) returns a 
+        pointer to the specified element if the coordinates are valid.
+        This function allows the client to read and modify the value
+        at that location as long as it does not intefere with how or
+        where the value is stored.
+    - void UArray2_map_row_major(T twoDArray, void apply(void* elem,
+        void * cl), void * cl) applies the function to each element of 
+        each row in order before moving to the next col, using the cl
+        variable to make any desired changes to the program's state.
+    - void UArray2_map_col_major(T twoDArray, void apply(void* elem,
+        void *cl), void * cl) applies the function to each element of 
+        each column in order before moving to the next row, using the 
+        cl variable to make any desired changes to the program's state.
+
+    UArray2b (uarray2b.c)
+    - UArray2b_T UArray2b_new(int width, int height, int size, int
+        blocksize) should return a two dimensional array of the given 
+        dimensions if the numbers are valid ( > 0) and a NULL pointer 
+        otherwise.
+    - UArray2b_T UArray2b_new_64K_block(int width, int height, int 
+        size) should return a two dimensional array of the given 
+        dimensions if the numbers are valid ( > 0) and a NULL pointer
+        otherwise.  The blocksize is as large as possible without
+        making the blocks larger than 64K.
+    - void UArray2b_free(UArray2b_T uarray2b) frees the memory 
+        associated.
+    - int UArray2b_height(UArray2b_T twoDbArray) returns the number of 
+        rows.
+    - int UArray2b_width(UArray2b_T twoDbArray) returns the number of 
+        columns.
+    - int UArray2b_size(UArray2b_T twoDbArray) returns the size of each
+        element.
+    - int UArray2b_blocksize(UArray2b_T twoDbArray) returns the 
+        dimensions of the block.
+    - void * UArray2b_at(UArray2b_T twoDbArray, int row, int col) 
+        returns a pointer to the specified element if the coordinates 
+        are valid. This function allows the client to read and modify 
+        the value at that location as long as it does not intefere with
+        how or where the value is stored.
+    - void UArray2b_map(UArray2b_T twoDbArray, void apply(int row, int
+        col, UArray2b_T twoDbArray, void* elem, void* cl), void * cl) 
+        applies the function to each element of each block in row major
+        order and then the next block in row major order, using the cl 
+        variable to make any desired changes to the program's state.
+
+    Bitpack (bitpack.c)
+    - bool Bitpack_fitsu(uint64_t n, unsigned width);
+        Takes in unsigned integer and returns T/F indicating whether it will
+        fit in the given width.
+    - bool Bitpack_fitss( int64_t n, unsigned width);
+        Takes in signed integer and returns T/F indicating whether it will
+        fit in the given width.
+    - uint64_t Bitpack_getu(uint64_t word, unsigned width, unsigned lsb);
+        Returns and unsigned integer located in the specified word beginning
+        at the lsb and of specified width.
+    - int64_t Bitpack_gets(uint64_t word, unsigned width, unsigned lsb);
+        Returns and signed integer located in the specified word beginning
+        at the lsb and of specified width.
+    - uint64_t Bitpack_newu(uint64_t word, unsigned width, unsigned lsb, 
+        uint64_t value);
+        Sets the value of the unsigned integer at the location specified and
+        returns the value.
+    - uint64_t Bitpack_news(uint64_t word, unsigned width, unsigned lsb,  
+        int64_t value);
+        Sets the value of the signed integer at the location specified and
+        returns the value.
+    - Except_T Bitpack_Overflow;
+        Exception that is thrown when the bits you are attempting to pack into
+        a specified word do not fit.
+
+TESTING COMPONENTS
+    Each compression function has a corresponding decompression function.  By
+    compressing and decompressing the image at each step of the conversion
+    processing and then examining the differences between them, we can observe
+    both the validity of our implementations and the transformations that
+    result in information loss. By testing each step in the compression
+    process against the decompression process, we can be sure that the higher
+    levels work before moving further into compression.
+
+CHALLENGE CHANGES
+    Our design relies heavily on apply functions that are applicable to
+    various UArray2 implementations (polymorphism!) and each apply function
+    only does one things. Because we have clearly specified what each function
+    does and broken them down into the smallest problems possible, we hope to
+    eliminate large scale changes in our code.
+
+INFORMATION LOSS
+    The three major areas where information will be lost is the "evening" out 
+    of the dimensions, the transition from RGB float values to Luminance and 
+    blue / red chroma, and in the transformation of cosine coefficients to 
+    five-bit signed values.  The second process uses imprecise matrix
+    multiplication, which could result in rounding errors and information
+    loss (not visible to the eye). The last process assumes that the the cosine
+    coefficients fall between -0.3 and +0.3, eliminating information in the
+    case of highly saturated images (fall between -0.5 to +0.5). 
