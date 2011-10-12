@@ -9,6 +9,7 @@
 #include "except.h"
 #include <stdlib.h>
 #include "mem.h"
+//#include "image.h"
 /*
 static void printvals(int col, int row, A2Methods_UArray2 array, void* elem,
 void*cl) {
@@ -39,12 +40,12 @@ struct YPP {
     float Pb;
     float Pr;
 };
-
+/*
 struct wrapCl {
     int size;
     // function pointer
 };
-
+*/
   /* Scale to integers using large apply*/
 static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
                                 void *elem, void *cl){
@@ -64,6 +65,7 @@ static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
   (void) array;
   struct Closure *mycl = cl;
   struct Pnm_rgb *curpix = elem; 
+  // original image may have different dimensions if originally odd
   if(row < mycl->methods->height(mycl->array) && 
       col < mycl->methods->width(mycl->array)) {
       struct Pnm_rgbScaled *scaled = mycl->methods->at(mycl->array, col, row);
@@ -74,32 +76,30 @@ static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
   }
 }
 
-void applyRGBFloatToLuminanceAndChromaFloats(int col, int row, 
+void applyRGBFLoatToLuminanceAndChromaFloats(int col, int row, 
     A2Methods_UArray2 array, void* elem, void* cl) {
-    
+    (void) array;
+    struct Closure *mycl = cl;
+    struct Pnm_rgbScaled *curpix = elem;
+    struct YPP *chroma = mycl->methods->at(mycl->array, col, row);
+    chroma->Y = 0.299 * curpix->red + 0.587 * curpix-> green + 0.144 *
+        curpix->blue;
+    chroma->Pb = -0.168736 * curpix->red - 0.331264 * curpix->green + 0.5 *
+        curpix->blue;
+    chroma->Pr = 0.5 * curpix->red - 0.418668 * curpix->green - 0.081312 *
+        curpix->blue;
 }
 
-void compress40(FILE *input){
-    Pnm_ppm image;
-    A2Methods_T methods = uarray2_methods_plain;
-    assert(methods);
-    TRY
-        image = Pnm_ppmread(input, methods);
-    EXCEPT(Pnm_Badformat)
-        fprintf(stderr, "Badly formatted file.\n");
-        exit(1);
-    END_TRY;
-    //printf("before resizing\n");
-    if(image->width % 2 != 0) {
-      image->width -= 1;
-    }
-    if(image->height % 2 != 0) {
-      image->height -= 1;
-    }
-    A2Methods_UArray2 scaledArray = *(RGBint_float(image, methods));
-    A2Methods_Uarray2 lumChromaArray = testRGBLumChroma(scaledArray, methods);
-    
-    Pnm_ppmfree(&image);
+void applyLuminanceAndChromaFloatsToRGBFloat(int col, int row, 
+        A2Methods_UArray2 array, void* elem, void* cl) {
+    (void) array;
+    struct Closure *mycl = cl;
+    struct YPP *curpix = elem;
+    struct Pnm_rgbScaled* rgbFloat = mycl->methods->at(mycl->array, col, row);
+    rgbFloat->red = 1.0 * curpix->Y + 0.0 * curpix->Pb + 1.402 * curpix->Pr;
+    rgbFloat->green = 1.0 * curpix->Y - 0.344136 * curpix->Pb - 0.714136 *
+        curpix->Pr;
+    rgbFloat->blue = 1.0 * curpix->Y + 1.772 * curpix->Pb + 0.0 * curpix->Pr;
 }
 
 A2Methods_UArray2* RGBint_float(Pnm_ppm image, A2Methods_T methods) {
@@ -123,7 +123,7 @@ Pnm_ppm RGBfloat_int(A2Methods_UArray2 array, A2Methods_T methods) {
     Pnm_ppm descaled;
     NEW(descaled);
     descaled->width = methods->width(array);
-    descaled->height = methods->height(height);
+    descaled->height = methods->height(array);
     descaled->denominator = 200;
     descaled->pixels = methods->new(descaled->width, descaled->height, 
                        sizeof(struct Pnm_rgb));
@@ -132,10 +132,11 @@ Pnm_ppm RGBfloat_int(A2Methods_UArray2 array, A2Methods_T methods) {
     cl.methods = methods;
     cl.denominator = descaled->denominator;
     cl.array = descaled->pixels;
-    methods->map_row_major(scaledArray, applyRGBToIntScale, &cl);
+    methods->map_row_major(array, applyRGBToIntScale, &cl);
     //Pnm_ppmwrite(stdout, descaled); 
 
-    Pnm_ppmfree(&descaled);
+    return descaled;
+    //Pnm_ppmfree(&descaled);
 }
 
 A2Methods_UArray2* RGBLumChroma(A2Methods_UArray2 array, A2Methods_T methods) {
@@ -144,18 +145,55 @@ A2Methods_UArray2* RGBLumChroma(A2Methods_UArray2 array, A2Methods_T methods) {
 
     struct Closure mycl;
     mycl.methods = methods;
-    mycl.demoninator = 1;
+    mycl.denominator = 1;
     mycl.array = lumChromaArray;
     methods->map_row_major(array, applyRGBFLoatToLuminanceAndChromaFloats,
         &mycl);
     
-    
+    return lumChromaArray;
 }
-
+/*
 A2Methods_UArray2* LumChromaRGB(A2Methods_UArray2 array, A2Methods_T methods)
 {
     
 }
+*/
+void compress40(FILE *input){
+    Pnm_ppm image;
+    A2Methods_T methods = uarray2_methods_plain;
+    assert(methods);
+    TRY
+        image = Pnm_ppmread(input, methods);
+    EXCEPT(Pnm_Badformat)
+        fprintf(stderr, "Badly formatted file.\n");
+        exit(1);
+    END_TRY;
+    //printf("before resizing\n");
+    if(image->width % 2 != 0) {
+      image->width -= 1;
+    }
+    if(image->height % 2 != 0) {
+      image->height -= 1;
+    }
+    A2Methods_UArray2 scaledArray = RGBint_float(image, methods);
+    A2Methods_UArray2 lumChromaArray = RGBLumChroma(scaledArray, methods);
+    
+    (void) lumChromaArray;
+    Pnm_ppmfree(&image);
+}
+/*
+Image wrap(Image img, wrapCl* cl) {
+    A2Methods_UArray2 modifiedArray = img->methods->new(img->width, 
+                                      img->height, cl->size);
+    struct Closure mycl;
+    mycl.methods = *(img->methods);
+    mycl.denominator = img->denominator;
+    mycl.array = modifiedArray;
+    img->methods->map_row_major(img->pixels, cl->apply, &mycl);
+
+    return modifiedArray;
+}
+*/
 
 void decompress40(FILE *input) {
     (void) input;

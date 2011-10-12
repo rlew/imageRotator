@@ -20,11 +20,18 @@ OVERALL ARCHITECTURE
     operations indicated above to represent the original image as closely as
     possible (lossy compression).
 
+    For all of the below programs:It is a checked run-time error if the array 
+    passed into any function is NULL or the coordinates are out of bounds. 
+
     40image (40image.c)
     - int main(int argc, char* argv[])
         Handles input by reading in command (-c or -d) and file to be
         modified. Exits and prints to stderr when too many arguments are given
         and when unknown flags are specified.
+
+    For compress / decompress apply functions, the closure holds the array of
+    the new type / format that is being created. It is updated with the
+    mapping of each pixel.
 
     compress40 (compress40.c)
     - void compress40(FILE *input)
@@ -47,8 +54,12 @@ OVERALL ARCHITECTURE
         coeffients for the 4 elements in the block.
     - void applyAvgAndDCTFloatsToInts(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl)
+        Transforms the average red/blue chroma and cosine coefficient values
+        from floats to signed and unsigned scaled integers. 
     - void applyBitPacking(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl)
+        Packs the cosine coefficients into 5-bit signed scaled integers to
+        create 32-bit codewords to represent each 2x2 block
     
     decompress40 (compress40.c)
     - void decompress40(FILE *input)
@@ -57,10 +68,17 @@ OVERALL ARCHITECTURE
         decompress the image to its original size.
     - void applyUnpackBits(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl)
+        Unpacks the cosine coefficients and chroma indexes for each 32-bit 
+        codeword.
     - void applyAvgAndDCTIntsToFloats(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl)
+        Transforms the scaled integer average chroma values and cosine
+        coefficients to floats
     - void applyAvgAndDCTToLuminanceAndChromaFloats(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl)
+        Inverse discrete cosine formula used to get the luminance of each
+        pixel. Each pixel's red/blue chroma value gets the average of the 4 in
+        the block.
     - void applyLuminanceAndChromaFloatsToRGBFloat(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl)
         Transforms the luminance and chroma red/blue values into an RGB float
@@ -72,7 +90,8 @@ OVERALL ARCHITECTURE
     UArray2 (uarray2.c)
     - UArray2_T UArray2_new(int numRows, int numCols, int size) should 
         return a two dimensional array of the given dimensions if the
-        numbers are valid ( > 0) and a NULL pointer otherwise.
+        numbers are valid ( > 0) and there is a checked run-time error
+        otherwise.
     - void UArray2_free(T uarray2) frees the memory associated.
     - int UArray2_numRows(T twoDArray) returns the number of rows.
     - int UArray2_numCols(T twoDArray) returns the number of columns.
@@ -147,6 +166,21 @@ OVERALL ARCHITECTURE
         Exception that is thrown when the bits you are attempting to pack into
         a specified word do not fit.
 
+INVARIANTS  
+    - Data Structures:
+        At each stage of this process, we are representing the image as a
+        pixmap with varying information storage formats for a given pixel. At
+        any point, each element in the array represents one of two things:
+            - how to represent a single pixel
+            - how to represent a block of 4 pixels
+        At any time, the UArray2 element can be compressed to represent a
+        portion of a 32-bit word, which can then be decompressed to a struct
+        of scaled integers
+    - Program:
+        At any point in the compression process, there is a corresponding
+        decompression process that will return the pixmap to its original
+        form. Although some information is lost, the amount is negligible.
+
 TESTING COMPONENTS
     Each compression function has a corresponding decompression function.  By
     compressing and decompressing the image at each step of the conversion
@@ -164,11 +198,17 @@ CHALLENGE CHANGES
     eliminate large scale changes in our code.
 
 INFORMATION LOSS
-    The three major areas where information will be lost is the "evening" out 
-    of the dimensions, the transition from RGB float values to Luminance and 
-    blue / red chroma, and in the transformation of cosine coefficients to 
-    five-bit signed values.  The second process uses imprecise matrix
-    multiplication, which could result in rounding errors and information
-    loss (not visible to the eye). The last process assumes that the the cosine
-    coefficients fall between -0.3 and +0.3, eliminating information in the
-    case of highly saturated images (fall between -0.5 to +0.5). 
+    The three major areas where information will be lost in compression is the
+    "evening" out of the dimensions, the transition from RGB float values to 
+    Luminance and blue / red chroma, and in the transformation of cosine 
+    coefficients to five-bit signed values.  The second process uses imprecise
+    matrix multiplication and floating point calcluations, which could result 
+    in rounding errors and information loss (not visible to the eye). The last 
+    process assumes that the the cosine coefficients fall between -0.3 and 
+    +0.3, eliminating information in the case of highly saturated images (fall
+    between -0.5 to +0.5). 
+    In terms of decompression, the most significant issue will arise in the
+    red and blue chroma values for each pixel.  Because these are averaged for
+    each block in the compression process, each pixel will be assigned the avg
+    in decompression, losing the chroma differences between each pixel in a
+    block.
