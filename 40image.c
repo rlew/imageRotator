@@ -46,7 +46,7 @@ struct wrapCl {
     // function pointer
 };
 */
-  /* Scale to integers using large apply*/
+/* Decompression: Changing from RGB float struct to RGB int struct */
 static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
                                 void *elem, void *cl){
   (void) array;
@@ -59,7 +59,7 @@ static void applyRGBToIntScale(int col, int row, A2Methods_UArray2 array,
   descaled->green = (unsigned)(curpix->green * denominator);
 }
 
-  /* Scale to floats using large apply*/
+  /* Compression: Chagning from RGB ints to RGB float structs */
 static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
                                 A2Methods_Object *elem, void *cl){
   (void) array;
@@ -76,6 +76,7 @@ static void applyRGBToFloatScale(int col, int row, A2Methods_UArray2 array,
   }
 }
 
+/* Compression: changing from RGB floats to Y, Pr, Pb values */
 void applyRGBFLoatToLuminanceAndChromaFloats(int col, int row, 
     A2Methods_UArray2 array, void* elem, void* cl) {
     (void) array;
@@ -90,6 +91,7 @@ void applyRGBFLoatToLuminanceAndChromaFloats(int col, int row,
         curpix->blue;
 }
 
+/* Decompression: changing from Y, Pr, Pb to RGB floats */
 void applyLuminanceAndChromaFloatsToRGBFloat(int col, int row, 
         A2Methods_UArray2 array, void* elem, void* cl) {
     (void) array;
@@ -102,62 +104,57 @@ void applyLuminanceAndChromaFloatsToRGBFloat(int col, int row,
     rgbFloat->blue = 1.0 * curpix->Y + 1.772 * curpix->Pb + 0.0 * curpix->Pr;
 }
 
-A2Methods_UArray2* RGBint_float(Pnm_ppm image, A2Methods_T methods) {
+/* Compression Test: compressing image from RGB ints to floats */
+void RGBint_float(Pnm_ppm image, A2Methods_T methods,
+    A2Methods_UArray2* scaledArray) {
 
     //printf("height, width: %d, %d\n", image->height, image->width);
     /* Array to hold floats */
-    A2Methods_UArray2 scaledArray = methods->new(image->width, 
-                                    image->height, 
-                                    sizeof(struct Pnm_rgbScaled));
     struct Closure mycl;
     mycl.methods = methods;
     mycl.denominator = image->denominator;
-    mycl.array = scaledArray;
+    mycl.array = *scaledArray;
     methods->map_row_major(image->pixels, applyRGBToFloatScale, &mycl);
-
-    return scaledArray;
 }
 
-Pnm_ppm RGBfloat_int(A2Methods_UArray2 array, A2Methods_T methods) {
+/* Decompression Test: decompressing image from floats to RGB ints */
+void RGBfloat_int(A2Methods_UArray2 array, A2Methods_T methods,
+    Pnm_ppm descaled) {
     /* New ppm to hold floats that are now integers */
-    Pnm_ppm descaled;
-    NEW(descaled);
-    descaled->width = methods->width(array);
-    descaled->height = methods->height(array);
-    descaled->denominator = 200;
-    descaled->pixels = methods->new(descaled->width, descaled->height, 
-                       sizeof(struct Pnm_rgb));
-    descaled->methods = methods;
     struct Closure cl;
     cl.methods = methods;
     cl.denominator = descaled->denominator;
     cl.array = descaled->pixels;
     methods->map_row_major(array, applyRGBToIntScale, &cl);
-    //Pnm_ppmwrite(stdout, descaled); 
-
-    return descaled;
-    //Pnm_ppmfree(&descaled);
 }
 
-A2Methods_UArray2* RGBLumChroma(A2Methods_UArray2 array, A2Methods_T methods) {
-    A2Methods_UArray2 lumChromaArray = methods->new(methods->width(array),
-        methods->height(array), sizeof(struct YPP));
+/* Compression Test: compressing RGB floats to Y, Pb, Pr */
+void RGBLumChroma(A2Methods_UArray2 array, A2Methods_T methods,
+    A2Methods_UArray2* lumChromaArray) {
+    
+    struct Closure mycl;
+    mycl.methods = methods;
+    mycl.denominator = 1;
+    mycl.array = *lumChromaArray;
+    methods->map_row_major(array, applyRGBFLoatToLuminanceAndChromaFloats,
+        &mycl);
+}
+/* Decompression Test: decompressing Y, Pb, Pr to RGB floats */
+A2Methods_UArray2* LumChromaRGB(A2Methods_UArray2 array, A2Methods_T methods)
+{
+    A2Methods_UArray2 rgbFloatArray = methods->new(methods->width(array),
+        methods->height(array), sizeof(struct Pnm_rgbScaled));
 
     struct Closure mycl;
     mycl.methods = methods;
     mycl.denominator = 1;
-    mycl.array = lumChromaArray;
-    methods->map_row_major(array, applyRGBFLoatToLuminanceAndChromaFloats,
+    mycl.array = rgbFloatArray;
+    methods->map_row_major(array, applyLuminanceAndChromaFloatsToRGBFloat,
         &mycl);
     
-    return lumChromaArray;
+    return rgbFloatArray; 
 }
-/*
-A2Methods_UArray2* LumChromaRGB(A2Methods_UArray2 array, A2Methods_T methods)
-{
-    
-}
-*/
+
 void compress40(FILE *input){
     Pnm_ppm image;
     A2Methods_T methods = uarray2_methods_plain;
@@ -175,10 +172,43 @@ void compress40(FILE *input){
     if(image->height % 2 != 0) {
       image->height -= 1;
     }
-    A2Methods_UArray2 scaledArray = RGBint_float(image, methods);
-    A2Methods_UArray2 lumChromaArray = RGBLumChroma(scaledArray, methods);
+    A2Methods_UArray2* scaledArray = methods->new(image->width, 
+                                    image->height, 
+                                    sizeof(struct Pnm_rgbScaled));
+    RGBint_float(image, methods, scaledArray);
+    /*A2Methods_UArray2* lumChromaArray = methods->new(methods->width(scaledArray),
+        methods->height(scaledArray), sizeof(struct YPP));
+    RGBLumChroma(*scaledArray, methods, lumChromaArray);*/
+    //methods->free(scaledArray);
+    //methods->free(lumChromaArray);
+
+    //A2Methods_UArray2 rgbFloatArray = LumChromaRGB(lumChromaArray, methods);
+    Pnm_ppm descaled;
+    NEW(descaled);
+    descaled->width = methods->width(scaledArray);
+    descaled->height = methods->height(scaledArray);
+    descaled->denominator = image->denominator;
+    descaled->pixels = methods->new(descaled->width, descaled->height, 
+                       sizeof(struct Pnm_rgb));
+    descaled->methods = methods;
+
+    RGBfloat_int(scaledArray, methods, descaled);
+
+    methods->free(scaledArray);
+    Pnm_ppmfree(&descaled);
+    /*methods->free(rgbFloatArray);
     
-    (void) lumChromaArray;
+    Pnm_ppm decompressed;
+    NEW(decompressed);
+    decompressed->height = image->height;
+    decompressed->width = image->width;
+    decompressed->denominator = image->denominator;
+    decompressed->pixels = decompressedImg;
+    decompressed->methods = methods;
+
+    Pnm_ppmwrite(stdout, decompressed);
+
+    Pnm_ppmfree(&decompressed);*/
     Pnm_ppmfree(&image);
 }
 /*

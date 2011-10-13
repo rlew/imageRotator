@@ -31,7 +31,8 @@ OVERALL ARCHITECTURE
 
     For compress / decompress apply functions, the closure holds the array of
     the new type / format that is being created. It is updated with the
-    mapping of each pixel.
+    mapping of each pixel. The pixmap will be represented as an
+    A2Methods_UArray2 with varying pixel structures.
 
     compress40 (compress40.c)
     - void compress40(FILE *input)
@@ -87,60 +88,6 @@ OVERALL ARCHITECTURE
         elem, void* cl)
         Transforms the RGB float structs to RGB int structs for a given pixel.
 
-    UArray2 (uarray2.c)
-    - UArray2_T UArray2_new(int numRows, int numCols, int size) should 
-        return a two dimensional array of the given dimensions if the
-        numbers are valid ( > 0) and there is a checked run-time error
-        otherwise.
-    - void UArray2_free(T uarray2) frees the memory associated.
-    - int UArray2_numRows(T twoDArray) returns the number of rows.
-    - int UArray2_numCols(T twoDArray) returns the number of columns.
-    - int UArray2_size(T twoDArray) returns the size of each element.
-    - void * UArray2_at(T twoDArray, int row, int col) returns a 
-        pointer to the specified element if the coordinates are valid.
-        This function allows the client to read and modify the value
-        at that location as long as it does not intefere with how or
-        where the value is stored.
-    - void UArray2_map_row_major(T twoDArray, void apply(void* elem,
-        void * cl), void * cl) applies the function to each element of 
-        each row in order before moving to the next col, using the cl
-        variable to make any desired changes to the program's state.
-    - void UArray2_map_col_major(T twoDArray, void apply(void* elem,
-        void *cl), void * cl) applies the function to each element of 
-        each column in order before moving to the next row, using the 
-        cl variable to make any desired changes to the program's state.
-
-    UArray2b (uarray2b.c)
-    - UArray2b_T UArray2b_new(int width, int height, int size, int
-        blocksize) should return a two dimensional array of the given 
-        dimensions if the numbers are valid ( > 0) and a NULL pointer 
-        otherwise.
-    - UArray2b_T UArray2b_new_64K_block(int width, int height, int 
-        size) should return a two dimensional array of the given 
-        dimensions if the numbers are valid ( > 0) and a NULL pointer
-        otherwise.  The blocksize is as large as possible without
-        making the blocks larger than 64K.
-    - void UArray2b_free(UArray2b_T uarray2b) frees the memory 
-        associated.
-    - int UArray2b_height(UArray2b_T twoDbArray) returns the number of 
-        rows.
-    - int UArray2b_width(UArray2b_T twoDbArray) returns the number of 
-        columns.
-    - int UArray2b_size(UArray2b_T twoDbArray) returns the size of each
-        element.
-    - int UArray2b_blocksize(UArray2b_T twoDbArray) returns the 
-        dimensions of the block.
-    - void * UArray2b_at(UArray2b_T twoDbArray, int row, int col) 
-        returns a pointer to the specified element if the coordinates 
-        are valid. This function allows the client to read and modify 
-        the value at that location as long as it does not intefere with
-        how or where the value is stored.
-    - void UArray2b_map(UArray2b_T twoDbArray, void apply(int row, int
-        col, UArray2b_T twoDbArray, void* elem, void* cl), void * cl) 
-        applies the function to each element of each block in row major
-        order and then the next block in row major order, using the cl 
-        variable to make any desired changes to the program's state.
-
     Bitpack (bitpack.c)
     - bool Bitpack_fitsu(uint64_t n, unsigned width);
         Takes in unsigned integer and returns T/F indicating whether it will
@@ -173,9 +120,14 @@ INVARIANTS
         any point, each element in the array represents one of two things:
             - how to represent a single pixel
             - how to represent a block of 4 pixels
-        At any time, the UArray2 element can be compressed to represent a
-        portion of a 32-bit word, which can then be decompressed to a struct
-        of scaled integers
+        At any time, the UArray2 element can be compressed through a series of
+        transformations to represent a portion of a 32-bit word, which can 
+        then be decompressed to a struct of scaled integers.
+        Within the 32-bit word the following must hold true for each pixel:
+            - the most significant cosine coefficient (a) will be 9 bits
+            - the cosine coefficients (b,c,d) will be 5 bits
+            - the chroma values will be represented as 4 bit indeces
+            - all bits are in big-endian order
     - Program:
         At any point in the compression process, there is a corresponding
         decompression process that will return the pixmap to its original
